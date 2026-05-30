@@ -1,0 +1,362 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <filesystem>
+#include <cstdlib>
+#include <vector>
+#include <chrono>   
+#include <iomanip>  
+#include <windows.h> 
+#include <map>
+#include <thread>  
+#include <atomic>
+
+namespace fs = std::filesystem;
+std::atomic<bool> keepCounting(false); 
+std::atomic<int> leftClicks(0);       
+std::map<std::string, int> appTimeline;
+
+void addToStartup() {
+
+    char buffer[MAX_PATH];// char it is standart variable that contains one symwol like "5", "k,"n";
+    GetModuleFileNameA(NULL, buffer, MAX_PATH);
+    std::string exePath(buffer);
+
+    HKEY hKey;
+    // Long it is int XD;
+    LONG lnRes = RegOpenKeyExA(
+        HKEY_CURRENT_USER,
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        0, KEY_WRITE, &hKey
+    );
+
+    if (lnRes == ERROR_SUCCESS) {
+        RegSetValueExA(
+            hKey,
+            "WorkspaceConsoleApp",
+            0,
+            REG_SZ,
+            (const BYTE*)exePath.c_str(),
+            (DWORD)(exePath.length() + 1)
+        );
+        RegCloseKey(hKey);
+    }
+}
+
+// Function to automatically get the path to the current user's Desktop
+std::string getDesktopPath() {
+    char* userProfile = std::getenv("USERPROFILE");
+    if (userProfile != nullptr) {
+        return std::string(userProfile) + "/Desktop/";
+    }
+    return "";
+}
+
+// Helper function to format file size into human-readable text (KB or MB)
+void printFileSize(uintmax_t bytes) {
+    std::cout << std::fixed << std::setprecision(2); // around for  c++ std::setprecision(2)
+    if (bytes >= 1024 * 1024) {
+        std::cout << (double)bytes / (1024.0 * 1024.0) << " MB";
+    }
+    else {
+        std::cout << (double)bytes / 1024.0 << " KB";
+    }
+}
+// Global command function: Analyzes sizes of files with a specific extension across C:/
+void analyzeExtension(const std::string& startPath, const std::string& extension) {
+    std::string targetExt = extension;
+    if (targetExt.find('.') != 0) {
+        targetExt = "." + targetExt;
+    }
+
+    std::cout << "Starting GLOBAL analysis for extension \"" << targetExt << "\" in " << startPath << "...\n";
+    std::cout << "Please wait, this might take some time for a large drive.\n\n";
+
+    uintmax_t totalSize = 0;
+    size_t fileCount = 0;
+    auto options = fs::directory_options::skip_permission_denied;
+
+    // Track time for global analysis to prevent user from thinking it froze
+    auto startTime = std::chrono::steady_clock::now();
+    bool passed20 = false, passed40 = false, passed120 = false;
+
+    try {
+        for (const auto& entry : fs::recursive_directory_iterator(startPath, options)) {
+            try {
+                auto currentTime = std::chrono::steady_clock::now();
+                auto elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
+
+                if (elapsedSeconds >= 20 && !passed20) { std::cout << "\n[NOTICE]: System thinking for 20 seconds...\n"; passed20 = true; }
+                else if (elapsedSeconds >= 40 && !passed40) { std::cout << "\n[NOTICE]: System thinking for 40 seconds...\n"; passed40 = true; }
+                else if (elapsedSeconds >= 120 && !passed120) { std::cout << "\n[NOTICE]: System thinking for 120 seconds...\n"; passed120 = true; }
+
+                if (entry.is_regular_file() && entry.path().extension().string() == targetExt) {
+                    uintmax_t fileSize = entry.file_size();
+                    totalSize += fileSize;
+                    fileCount++;
+
+                    // Output file name and weight
+                    std::cout << "[" << fileCount << "] " << entry.path().filename().string() << "  ->  Size: ";
+                    printFileSize(fileSize);
+                    std::cout << "\n";
+                }
+            }
+            catch (...) {
+                continue; // Ignore permission errors on system folders
+            }
+        }
+    }
+    catch (const std::exception& e) {
+        std::cout << "Global analysis initialization error: " << e.what() << "\n";
+    }
+
+    if (fileCount == 0) {
+        std::cout << "\nAnalysis finished. No files found with extension \"" << targetExt << "\" on drive C:/.\n";
+    }
+    else {
+        std::cout << "\n=========================================\n";
+        std::cout << "GLOBAL ANALYSIS COMPLETE\n";
+        std::cout << "Total files found: " << fileCount << "\n";
+        std::cout << "Total combined weight: ";
+        printFileSize(totalSize);
+        std::cout << "\n=========================================\n";
+    }
+}
+
+// Advanced search function with multi-stage time notifications (20s, 40s, 120s)
+void searchFile(const std::string& startPath, const std::string& targetName) {
+    std::cout << "Searching for files with name \"" << targetName << "\" in " << startPath << "...\n";
+
+    std::vector<std::string> matches;
+    auto options = fs::directory_options::skip_permission_denied;
+    auto startTime = std::chrono::steady_clock::now();
+
+    bool passed20 = false, passed40 = false, passed120 = false;
+
+    try {
+        for (const auto& entry : fs::recursive_directory_iterator(startPath, options)) {
+            try {
+                auto currentTime = std::chrono::steady_clock::now();
+                auto elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count();
+
+                if (elapsedSeconds >= 20 && !passed20) { std::cout << "\n[NOTICE]: System thinking for 20 seconds...\n"; passed20 = true; }
+                else if (elapsedSeconds >= 40 && !passed40) { std::cout << "\n[NOTICE]: System thinking for 40 seconds...\n"; passed40 = true; }
+                else if (elapsedSeconds >= 120 && !passed120) { std::cout << "\n[NOTICE]: System thinking for 120 seconds...\n"; passed120 = true; }
+
+                if (entry.is_regular_file()) {
+                    std::string stemName = entry.path().stem().string();
+                    std::string fullFileName = entry.path().filename().string();
+
+                    if (stemName == targetName || fullFileName == targetName) {
+                        fs::path windowsPath = entry.path();
+                        matches.push_back(windowsPath.make_preferred().string());
+                    }
+                }
+            }
+            catch (...) { continue; }
+        }
+    }
+    catch (const std::exception& e) { std::cout << "Search error: " << e.what() << "\n"; }
+
+    if (matches.empty()) { std::cout << "Search finished. No files found.\n"; return; }
+
+    if (matches.size() == 1) {
+        std::cout << "\n[FOUND]: " << matches[0] << "\n";
+        std::cout << "Opening File Explorer and selecting the file...\n";
+        std::string arguments = "/select,\"" + matches[0] + "\"";
+        ShellExecuteA(NULL, "open", "explorer.exe", arguments.c_str(), NULL, SW_SHOWNORMAL);
+    }
+    else {
+        std::cout << "\nMultiple files found (" << matches.size() << " items):\n";
+        for (size_t i = 0; i < matches.size(); ++i) {
+            fs::path p(matches[i]);
+            std::cout << "[" << i + 1 << "] " << p.extension().string() << "  ->  " << matches[i] << "\n";
+        }
+        std::cout << "\nEnter the number of the file you want to open (or 0 to cancel): ";
+        std::string choiceInput;
+        std::getline(std::cin, choiceInput);
+        try {
+            int choice = std::stoi(choiceInput);
+            if (choice > 0 && choice <= static_cast<int>(matches.size())) {
+                std::string arguments = "/select,\"" + matches[choice - 1] + "\"";
+                ShellExecuteA(NULL, "open", "explorer.exe", arguments.c_str(), NULL, SW_SHOWNORMAL);
+            }
+            else { std::cout << "Action canceled.\n"; }
+        }
+        catch (...) { std::cout << "Invalid input. Action canceled.\n"; }
+    }
+}
+std::string getActiveWindowTitle() {
+    HWND hwnd = GetForegroundWindow();
+    if (hwnd) {
+        wchar_t wBuffer[512]; // Buffer for wide Unicode characters (UTF-16)
+        GetWindowTextW(hwnd, wBuffer, 512); // Capture the title bar in wide format
+
+        // Convert wchar_t (UTF-16) into standard std::string (UTF-8)
+        int size_needed = WideCharToMultiByte(CP_UTF8, 0, wBuffer, -1, NULL, 0, NULL, NULL);
+        std::string strTo(size_needed, 0);
+        WideCharToMultiByte(CP_UTF8, 0, wBuffer, -1, &strTo[0], size_needed, NULL, NULL);
+
+        // Remove the trailing null-terminator character captured during conversion
+        if (!strTo.empty() && strTo.back() == '\0') {
+            strTo.pop_back();
+        }
+
+        if (!strTo.empty()) return strTo;
+    }
+    return "Unknown Application";
+}
+
+void runSilentAnalysLoop() {
+    bool leftPressed = false;
+    auto lastCheckTime = std::chrono::steady_clock::now();
+
+    while (keepCounting) {
+        // 1. Capture and count global mouse clicks
+        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
+            if (!leftPressed) {
+                leftClicks++;
+                leftPressed = true;
+            }
+        }
+        else {
+            leftPressed = false;
+        }
+
+        // 2. Track time spent in active windows every 1 second
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - lastCheckTime).count();
+
+        if (elapsed >= 1) {
+            std::string activeApp = getActiveWindowTitle();
+            appTimeline[activeApp]++; // Log 1 second to this specific app title
+            lastCheckTime = now;
+        }
+
+        Sleep(10); // Safeguard against 100% CPU spikes
+    }
+}
+int main() {
+    addToStartup();
+    SetConsoleCP(65001);
+    SetConsoleOutputCP(65001);
+    SetConsoleTitleA("Workspace Console");
+    system("color 02");
+    char* localAppData = std::getenv("LOCALAPPDATA");
+    std::string userInput;
+    int leftClicks = 0;
+    bool silentAnalys = false;
+    bool leftPressed = false;
+    std::cout << "Commands: create folder <name>, openWorkSpace, find <name>, Analys <.ext>, exit\n";
+
+    while (true) {
+        std::cout << "> ";
+        std::getline(std::cin, userInput);
+        
+
+        if (userInput == "StartSilentAnalys") {
+            auto now = std::chrono::system_clock::now();
+            std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+            std::tm* localTime = std::localtime(&currentTime);
+
+            std::cout << "StartSilentAnalys was started at:\n  "
+                << std::put_time(localTime, "%H:%M:%S (%d.%m.%Y)") << "\n";
+            std::cout << "Silent tracking ACTIVE. Type 'StopSilentAnalys' to get the report.\n\n";
+
+            leftClicks = 0;
+            appTimeline.clear();
+            keepCounting = true;
+
+            std::thread analysThread(runSilentAnalysLoop);
+
+            while (true) {
+                std::cout << "[SILENT]> ";
+                std::getline(std::cin, userInput);
+
+                if (userInput == "StopSilentAnalys") {
+                    keepCounting = false;
+                    break;
+                }
+                else {
+                    std::cout << "System is running in silent mode. Type 'StopSilentAnalys' to stop.\n";
+                }
+            }
+
+            if (analysThread.joinable()) {
+                analysThread.join();
+            }
+
+            std::cout << "\n=========================================\n";
+            std::cout << "          SILENT ANALYS REPORT           \n";
+            std::cout << "=========================================\n";
+            std::cout << "Total Left clicks captured: " << leftClicks << "\n\n";
+            std::cout << "Active applications timeline:\n";
+
+            for (const auto& [appName, seconds] : appTimeline) {
+                std::cout << " -> [" << seconds << "s] " << appName << "\n";
+            }
+            std::cout << "=========================================\n";
+            HWND hConsole = GetConsoleWindow();
+
+            if (hConsole != NULL) {
+                // 2. Наказуємо Windows згорнути це вікно (SW_MINIMIZE)
+                ShowWindow(hConsole, SW_MINIMIZE);
+            }
+            continue;
+        }
+        if (userInput == "exit") { break; }
+        if (userInput == "clear" || userInput == "clean") {
+            system("cls"); // Executes Windows standard clear screen command
+            std::cout << "Commands: create folder <name>, openWorkSpace, find <name>, Analys <.ext>, clear, exit\n";
+            continue;
+        }
+        if (userInput == "openWorkSpace") {
+            std::cout << "Opening workspace...\n";
+            ShellExecuteA(NULL, "open", "https://google.com", NULL, NULL, SW_SHOWNORMAL);
+            const char* unityPath = "C:\\Program Files\\Unity Hub\\Unity Hub.exe";
+            ShellExecuteA(NULL, "open", unityPath, NULL, NULL, SW_SHOWNORMAL);
+            if (localAppData != nullptr) {
+                std::string viberPath = std::string(localAppData) + "\\Viber\\Viber.exe";
+                ShellExecuteA(NULL, "open", viberPath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+            }
+            continue;
+        }
+
+
+        // Updated global command handler: Analys <.ext> starting from C:/
+        if (userInput.rfind("Analys ", 0) == 0) {
+            std::string ext = userInput.substr(7);
+            if (ext.empty()) {
+                std::cout << "Error: Please specify an extension. Example: Analys .png\n";
+                continue;
+            }
+            // CHANGED: "C:/" is passed as the path to perform global scanning instead of "."
+            analyzeExtension("C:/", ext);
+            continue;
+        }
+
+        if (userInput.rfind("find ", 0) == 0) {
+            std::string fileName = userInput.substr(5);
+            if (fileName.empty()) { std::cout << "Error: Please specify a file name.\n"; continue; }
+            searchFile("C:/", fileName);
+            continue;
+        }
+
+        std::stringstream ss(userInput);
+        std::string command1, command2, targetArg;
+        ss >> command1 >> command2 >> targetArg;
+
+        if (command1 == "create" && command2 == "folder" && !targetArg.empty()) {
+            std::string desktopPath = getDesktopPath();
+            if (desktopPath.empty()) { std::cout << "Error: Could not locate Desktop.\n"; continue; }
+            std::string fullPath = desktopPath + targetArg;
+            try {
+                if (fs::create_directory(fullPath)) std::cout << "Success: Folder '" << targetArg << "' created!\n";
+                else std::cout << "Notice: Folder already exists.\n";
+            }
+            catch (const fs::filesystem_error& e) { std::cout << "Error: " << e.what() << '\n'; }
+        }
+        else { std::cout << "Unknown command. Try: create folder , openWorkSpace, find , or Analys <.ext>\n"; }
+    }return 0;
+}

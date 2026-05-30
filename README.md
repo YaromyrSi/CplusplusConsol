@@ -1,1 +1,3 @@
-# C++ consol aplication
+This application is designed to optimize your workflow. 
+Here are the instructions to set it up for your needs.
+OPENWORKSPACE - This command quickly launches all work applications after restarting your PC.To easelly set up proggrams you need folow next steps.1 install Visual studio in oficial site with link "https://visualstudio.microsoft.com/" if you do not have one. find and open file with .sln pluging.3 go in the int main void and find if (userInput == "openWorkSpace").4 edit file with exampe ShellExecuteA(NULL, "open", "https://google.com", NULL, NULL, SW_SHOWNORMAL); - (for links), and  const char* unityPath = "C:\\Program Files\\Unity Hub\\Unity Hub.exe"; - (for aplications)

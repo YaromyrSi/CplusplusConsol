@@ -1,1 +1,1 @@
-# SplineGenarator
+# C++ consol aplication
